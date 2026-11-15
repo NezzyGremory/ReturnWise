@@ -1,0 +1,23 @@
+# Core application and research environment (Python 3.11+)
+streamlit>=1.57,<2
+pandas>=2.1,<4
+numpy>=1.26,<3
+scipy>=1.11,<2
+scikit-learn>=1.4,<2
+kaggle>=2.2,<3
+joblib>=1.3,<2
+ipykernel>=6.29,<8
+jupyterlab>=4.1,<5
+nbformat>=5.9,<6
+psutil>=5.9,<8
+statsmodels>=0.14,<1
+matplotlib>=3.8,<4
+
+# Optional model families and research methods. The benchmark skips a family
+# cleanly when its dependency is unavailable or incompatible.
+catboost>=1.2,<2
+lightgbm>=4,<5
+xgboost>=2,<4
+optuna>=3.5,<5
+shap>=0.45,<1
+tabpfn>=6,<7
