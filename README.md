@@ -6,7 +6,9 @@ ReturnWise is a local Python research workspace and Streamlit application for st
 
 ## Current status
 
-The project starts without a dataset or trained model. No research metric is prefilled. Kaggle acquisition stops safely when Kaggle CLI authentication or competition access is unavailable; manual CSV import is available for profiling and research. Prediction remains disabled until a model is trained from labeled data and exported.
+As of 2026-11-15, the validated Kaggle CSV cache is available and Notebooks 00–20 have completed in serial Quick Mode. The exported pre-shipment model is `Soft voting: HistGradientBoosting + Logistic regression` with beta calibration. On the untouched internal holdout it recorded ROC-AUC 0.5895, average precision 0.5561, Brier score 0.2431, and log loss 0.6791. These are modest predictive results on a random internal split, not evidence of temporal or operational impact.
+
+The Streamlit risk queue and decision simulator use the exported artifact. Automated smoke tests cover the app routes, artifact scoring, and queue decisions. The report draft at `reports/returnwise_research_report.md` is based on saved experiment state and verified local data. See `docs/implementation_plan.md` for resource limits, skipped optional models, data-quality findings, and study limitations.
 
 ## Local setup (Windows PowerShell)
 
@@ -42,7 +44,7 @@ The Dataset and quality page supports Kaggle Connected Mode and Manual CSV Mode.
 
 ## Research workflow
 
-Run the notebooks in numeric order from `notebooks/00_environment_setup.ipynb` through `notebooks/20_returnwise_model_export.ipynb`. Each notebook saves handoff state locally under `experiments/research_state.joblib` so the sequence can use separate Jupyter kernels. The state and generated datasets are ignored by Git.
+Run the notebooks in numeric order from `notebooks/00_environment_setup.ipynb` through `notebooks/20_returnwise_model_export.ipynb`. Each notebook saves handoff state locally under `experiments/research_state.joblib` so the sequence can use separate Jupyter kernels. The state and generated datasets are ignored by Git. After dataset validation, `python scripts/run_research_pipeline.py` executes the sequence serially, skips complete notebooks, checks state handoffs and resource thresholds, and stops on errors.
 
 The first notebook checks the environment. The acquisition notebook downloads only the requested competition via Kaggle CLI; it does not substitute another dataset. A manual CSV can be selected on the application page when Kaggle is unavailable. The competition `test.csv` has no labels and is never used for labeled evaluation.
 

@@ -179,7 +179,7 @@ def main() -> int:
         _run_notebook(path)
         _verify_state(number, fingerprint)
         _check_resources(f"the next notebook after {path.name}")
-    print("All notebooks 00–20 completed and saved.", flush=True)
+    print("All notebooks 00-20 completed and saved.", flush=True)
     return 0
 
 

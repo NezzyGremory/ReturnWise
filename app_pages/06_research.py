@@ -6,10 +6,17 @@ import streamlit as st
 from returnwise.data.kaggle import read_metadata
 from returnwise.experiments import read_experiment_history
 from returnwise.report import generate_research_report
-from returnwise.storage import load_active_dataset, load_model_artifact
+from returnwise.research_state import STATE_FILE
+from returnwise.storage import active_dataset_fingerprint, load_active_dataset, load_model_artifact
+
+
+@st.cache_data(show_spinner=False)
+def _cached_research_report(dataset_fingerprint: str, state_modified_ns: int, metadata_json: str) -> str:
+    metadata = json.loads(metadata_json) if metadata_json else None
+    return generate_research_report(None, metadata)
 
 st.title("Models and research")
-frame, manifest = load_active_dataset()
+_frame, manifest = load_active_dataset()
 artifact = load_model_artifact()
 history = read_experiment_history()
 
@@ -49,7 +56,10 @@ else:
     st.info("No model artifact is available. ReturnWise does not display placeholder model scores.")
 
 st.subheader("Research report")
-report = generate_research_report(frame, artifact.get("metadata") if artifact else None)
+dataset_key = active_dataset_fingerprint() or (meta or {}).get("fingerprint_sha256", "")
+state_modified = STATE_FILE.stat().st_mtime_ns if STATE_FILE.is_file() else 0
+metadata_json = json.dumps(artifact.get("metadata") if artifact else None, sort_keys=True, default=str)
+report = _cached_research_report(dataset_key, state_modified, metadata_json)
 st.download_button("Download current report", data=report.encode("utf-8"), file_name="returnwise_research_report.md", mime="text/markdown", width="content")
 with st.expander("Preview report"):
     st.markdown(report)

@@ -97,6 +97,18 @@ def make_competition_submission(model_payload: dict, competition_test: pd.DataFr
         competition_test[shared_ids].reset_index(drop=True)
     ):
         raise ValueError("Competition test identifiers do not match sample_submission.csv order.")
+    sample_id = next(
+        (c for c in sample_submission.columns if str(c).strip().lower() in {"id", "order_id"}),
+        None,
+    )
+    test_id = next(
+        (c for c in competition_test.columns if str(c).strip().lower() in {"id", "order_id"}),
+        None,
+    )
+    if sample_id and test_id and not sample_submission[sample_id].reset_index(drop=True).equals(
+        competition_test[test_id].reset_index(drop=True)
+    ):
+        raise ValueError("Competition test order_id values do not match sample_submission identifiers.")
     raw, _ = predict_with_artifact(model_payload, competition_test)
     submission = sample_submission.copy()
     submission[target] = raw

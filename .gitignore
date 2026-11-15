@@ -16,6 +16,7 @@ artifacts/*
 reports/generated/*
 !reports/generated/.gitkeep
 experiments/*.jsonl
+experiments/*.db
 experiments/research_state.joblib
 *.joblib
 *.pkl

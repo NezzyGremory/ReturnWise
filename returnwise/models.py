@@ -23,13 +23,15 @@ from sklearn.metrics import (
     recall_score,
     roc_auc_score,
 )
-from sklearn.model_selection import StratifiedKFold
+from sklearn.model_selection import StratifiedKFold, train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, OrdinalEncoder, StandardScaler
 from sklearn.dummy import DummyClassifier
 from sklearn.base import BaseEstimator, ClassifierMixin, TransformerMixin
+from sklearn.feature_selection import SelectFromModel
 
 from returnwise.features import ReturnWiseFeatureEngineer
+from returnwise.paths import EXPERIMENT_DIR
 
 SCORING = ("roc_auc", "pr_auc", "accuracy", "balanced_accuracy", "precision", "recall", "f1")
 
@@ -37,14 +39,15 @@ SCORING = ("roc_auc", "pr_auc", "accuracy", "balanced_accuracy", "precision", "r
 class CatBoostFrameCleaner(BaseEstimator, TransformerMixin):
     """Keep feature names and normalize missing values for native CatBoost categories."""
 
-    def __init__(self, categorical_columns):
+    def __init__(self, categorical_columns, feature_engineering=False):
         self.categorical_columns = list(categorical_columns)
+        self.feature_engineering = feature_engineering
 
     def fit(self, X, y=None):  # noqa: N803
         return self
 
     def transform(self, X):  # noqa: N803
-        frame = ReturnWiseFeatureEngineer().transform(X)
+        frame = ReturnWiseFeatureEngineer().transform(X) if self.feature_engineering else pd.DataFrame(X).copy()
         for col in frame.columns:
             if col in self.categorical_columns or not pd.api.types.is_numeric_dtype(frame[col]):
                 frame[col] = frame[col].astype("string").fillna("__MISSING__").astype(str)
@@ -130,19 +133,43 @@ def build_preprocessor(X: pd.DataFrame, dense: bool = False, scale: bool = False
     )
 
 
-def _pipeline(X: pd.DataFrame, estimator, *, scale: bool = False, dense: bool = False):  # noqa: N803
-    return Pipeline(
+def _pipeline(
+    X: pd.DataFrame,
+    estimator,
+    *,
+    scale: bool = False,
+    dense: bool = False,
+    feature_engineering: bool = False,
+    feature_selection: str | None = None,
+):  # noqa: N803
+    preprocessing_frame = ReturnWiseFeatureEngineer().fit_transform(X) if feature_engineering else pd.DataFrame(X)
+    steps = []
+    if feature_engineering:
+        steps.append(("features", ReturnWiseFeatureEngineer()))
+    steps.extend(
         [
-            ("features", ReturnWiseFeatureEngineer()),
-            ("preprocess", build_preprocessor(X, dense=dense, scale=scale)),
-            ("model", estimator),
+            ("preprocess", build_preprocessor(preprocessing_frame, dense=dense, scale=scale)),
         ]
     )
+    if feature_selection == "l1":
+        selector = LogisticRegression(
+            C=0.1,
+            penalty="l1",
+            solver="saga",
+            class_weight="balanced",
+            max_iter=2000,
+            random_state=42,
+        )
+        steps.append(("feature_selection", SelectFromModel(selector, threshold="median")))
+    elif feature_selection is not None:
+        raise ValueError("Supported fold-local feature_selection is None or 'l1'.")
+    steps.append(("model", estimator))
+    return Pipeline(steps)
 
 
-def _hist_pipeline(X: pd.DataFrame, seed: int, max_iter: int):  # noqa: N803
-    engineered = ReturnWiseFeatureEngineer().fit_transform(X)
-    numeric, categorical = _feature_groups(engineered)
+def _hist_pipeline(X: pd.DataFrame, seed: int, max_iter: int, feature_engineering: bool = False):  # noqa: N803
+    preprocessing_frame = ReturnWiseFeatureEngineer().fit_transform(X) if feature_engineering else pd.DataFrame(X)
+    numeric, categorical = _feature_groups(preprocessing_frame)
     preprocessor = ColumnTransformer(
         [
             ("numeric", Pipeline([("impute", SimpleImputer(strategy="median", keep_empty_features=True))]), numeric),
@@ -159,32 +186,53 @@ def _hist_pipeline(X: pd.DataFrame, seed: int, max_iter: int):  # noqa: N803
         ],
         sparse_threshold=0,
     )
-    return Pipeline(
+    steps = []
+    if feature_engineering:
+        steps.append(("features", ReturnWiseFeatureEngineer()))
+    steps.extend(
         [
-            ("features", ReturnWiseFeatureEngineer()),
             ("preprocess", preprocessor),
             ("model", HistGradientBoostingClassifier(max_iter=max_iter, learning_rate=0.08, random_state=seed)),
         ]
     )
+    return Pipeline(steps)
 
 
-def model_registry(X: pd.DataFrame, mode: str = "quick", seed: int = 42) -> tuple[dict[str, object], dict[str, str]]:  # noqa: N803
+def model_registry(
+    X: pd.DataFrame,
+    mode: str = "quick",
+    seed: int = 42,
+    feature_engineering: bool = False,
+    feature_selection: str | None = None,
+) -> tuple[dict[str, object], dict[str, str]]:  # noqa: N803
     """Create available candidate pipelines; optional families fail independently."""
     quick = mode.lower() == "quick"
     trees = 32 if quick else 300
     iterations = 48 if quick else 250
     candidates: dict[str, object] = {
-        "Dummy (prior)": _pipeline(X, DummyClassifier(strategy="prior")),
-        "Logistic regression": _pipeline(X, LogisticRegression(max_iter=2000, class_weight="balanced"), scale=True),
+        "Dummy (prior)": _pipeline(
+            X, DummyClassifier(strategy="prior"), feature_engineering=feature_engineering
+        ),
+        "Logistic regression": _pipeline(
+            X,
+            LogisticRegression(max_iter=2000, class_weight="balanced"),
+            scale=True,
+            feature_engineering=feature_engineering,
+            feature_selection=feature_selection,
+        ),
         "Random forest": _pipeline(
             X,
             RandomForestClassifier(n_estimators=trees, min_samples_leaf=2, class_weight="balanced_subsample", n_jobs=1, random_state=seed),
+            feature_engineering=feature_engineering,
+            feature_selection=feature_selection,
         ),
         "Extra trees": _pipeline(
             X,
             ExtraTreesClassifier(n_estimators=trees, min_samples_leaf=2, class_weight="balanced", n_jobs=1, random_state=seed),
+            feature_engineering=feature_engineering,
+            feature_selection=feature_selection,
         ),
-        "HistGradientBoosting": _hist_pipeline(X, seed, iterations),
+        "HistGradientBoosting": _hist_pipeline(X, seed, iterations, feature_engineering=feature_engineering),
     }
     skipped: dict[str, str] = {}
 
@@ -196,7 +244,7 @@ def model_registry(X: pd.DataFrame, mode: str = "quick", seed: int = 42) -> tupl
             cats = [c for c in engineered.columns if not pd.api.types.is_numeric_dtype(engineered[c])]
             candidates["CatBoost"] = Pipeline(
                 [
-                    ("features", CatBoostFrameCleaner(cats)),
+                    ("features", CatBoostFrameCleaner(cats, feature_engineering=feature_engineering)),
                     (
                         "model",
                         CatBoostClassifier(
@@ -231,6 +279,8 @@ def model_registry(X: pd.DataFrame, mode: str = "quick", seed: int = 42) -> tupl
                     n_jobs=1,
                     random_state=seed,
                 ),
+                feature_engineering=feature_engineering,
+                feature_selection=feature_selection,
             )
         except Exception as exc:
             skipped["LightGBM"] = f"Unavailable at import: {exc.__class__.__name__}: {exc}"
@@ -253,6 +303,8 @@ def model_registry(X: pd.DataFrame, mode: str = "quick", seed: int = 42) -> tupl
                     n_jobs=1,
                     random_state=seed,
                 ),
+                feature_engineering=feature_engineering,
+                feature_selection=feature_selection,
             )
         except Exception as exc:
             skipped["XGBoost"] = f"Unavailable at import: {exc.__class__.__name__}: {exc}"
@@ -266,7 +318,9 @@ def model_registry(X: pd.DataFrame, mode: str = "quick", seed: int = 42) -> tupl
             try:
                 from tabpfn import TabPFNClassifier
 
-                candidates["TabPFN"] = _pipeline(X, TabPFNClassifier(), dense=True)
+                candidates["TabPFN"] = _pipeline(
+                    X, TabPFNClassifier(), dense=True, feature_engineering=feature_engineering
+                )
             except Exception as exc:
                 skipped["TabPFN"] = f"Unavailable at import: {exc.__class__.__name__}: {exc}"
         else:
@@ -306,8 +360,14 @@ def benchmark_models(
     folds: int | None = None,
     seed: int = 42,
     model_names: list[str] | None = None,
+    feature_engineering: bool = False,
+    feature_selection: str | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, object]]:
-    """Run consistent stratified CV and report discrimination, cost-independent metrics, and time."""
+    """Run consistent stratified CV and report metrics, optionally disabling deterministic interactions."""
+    if feature_selection is not None and (
+        feature_selection != "l1" or model_names is None or len(model_names) != 1 or model_names[0] != "Logistic regression"
+    ):
+        raise ValueError("The current fold-local L1 selection comparison is defined for Logistic regression only.")
     if len(X) != len(y):
         raise ValueError("X and y row counts do not match.")
     y = pd.Series(y).astype(int).reset_index(drop=True)
@@ -316,7 +376,13 @@ def benchmark_models(
     n_splits = min(folds or (3 if mode.lower() == "quick" else 5), min_class)
     if n_splits < 2:
         raise ValueError("At least two observations per class are required for stratified validation.")
-    candidates, skipped = model_registry(X, mode, seed)
+    candidates, skipped = model_registry(
+        X,
+        mode,
+        seed,
+        feature_engineering=feature_engineering,
+        feature_selection=feature_selection,
+    )
     if model_names is not None:
         for name in model_names:
             if name not in candidates and name not in skipped:
@@ -348,6 +414,15 @@ def benchmark_models(
                 probabilities = _probabilities(model, valid_x)
                 predict_time = time.perf_counter() - started
                 values = _metrics(valid_y, probabilities)
+                selected_features = None
+                selector = model.named_steps.get("feature_selection") if hasattr(model, "named_steps") else None
+                if selector is not None:
+                    support = selector.get_support()
+                    try:
+                        feature_names = model.named_steps["preprocess"].get_feature_names_out()
+                        selected_features = np.asarray(feature_names)[support].tolist()
+                    except (AttributeError, ValueError):
+                        selected_features = [int(index) for index in np.flatnonzero(support)]
                 per_fold.append(values)
                 fit_seconds.append(fit_time)
                 predict_seconds.append(predict_time)
@@ -361,6 +436,7 @@ def benchmark_models(
                         "fit_seconds": fit_time,
                         "inference_seconds": predict_time,
                         "rss_delta_mb": memory_deltas[-1],
+                        "selected_features": selected_features,
                         "status": "completed",
                     }
                 )
@@ -411,87 +487,188 @@ def fit_best_model(
     return model
 
 
-def tune_with_optuna(X: pd.DataFrame, y, model_name: str, mode: str = "quick", seed: int = 42):  # noqa: N803
-    """Bounded Optuna search on training data only; unsupported optional families are rejected."""
+def tune_with_optuna(
+    X: pd.DataFrame,
+    y,
+    model_name: str,
+    mode: str = "quick",
+    seed: int = 42,
+    n_trials: int | None = None,
+    study_path: str | None = None,
+    study_name: str | None = None,
+    timeout: int | None = None,
+):  # noqa: N803
+    """Run resumable TPE tuning on training data with inner-fold early stopping."""
     try:
         import optuna
+        from sqlalchemy.engine import URL
     except ImportError as exc:
-        raise RuntimeError("Optuna is not installed. Install it from requirements.txt.") from exc
-    candidates, _ = model_registry(X, mode, seed)
+        raise RuntimeError("Optuna and its SQLAlchemy storage dependency must be installed.") from exc
+
+    mode = mode.lower()
+    candidates, skipped = model_registry(X, mode, seed)
     if model_name not in {"CatBoost", "LightGBM", "XGBoost"} or model_name not in candidates:
         raise ValueError("Optuna tuning is available for installed CatBoost, LightGBM, or XGBoost candidates.")
-    trials = 8 if mode.lower() == "quick" else 40
-    cv = StratifiedKFold(n_splits=3 if mode.lower() == "quick" else 5, shuffle=True, random_state=seed)
+    trial_budget = n_trials if n_trials is not None else (8 if mode == "quick" else 40)
+    if trial_budget < 1:
+        raise ValueError("n_trials must be a positive integer.")
+    cv = StratifiedKFold(n_splits=3 if mode == "quick" else 5, shuffle=True, random_state=seed)
     base = candidates[model_name]
+    target = np.asarray(y, dtype=int)
+    if len(X) != len(target):
+        raise ValueError("X and y row counts do not match.")
+    iterations_high = 250 if mode == "quick" else 700
+    default_name = f"returnwise-{model_name.lower().replace(' ', '-')}-{mode}-seed-{seed}"
+    study_name = study_name or default_name
+    sqlite_path = Path(study_path) if study_path else EXPERIMENT_DIR / "optuna_studies.db"
+    sqlite_path.parent.mkdir(parents=True, exist_ok=True)
+    sqlite_path = sqlite_path.resolve()
+    storage_url = URL.create("sqlite", database=str(sqlite_path))
+
+    if model_name == "CatBoost":
+        from catboost import CatBoostError
+
+        caught_errors = (ValueError, TypeError, RuntimeError, CatBoostError)
+    elif model_name == "LightGBM":
+        from lightgbm.basic import LightGBMError
+
+        caught_errors = (ValueError, TypeError, RuntimeError, LightGBMError)
+    else:
+        from xgboost.core import XGBoostError
+
+        caught_errors = (ValueError, TypeError, RuntimeError, XGBoostError)
 
     def objective(trial):
         if model_name == "CatBoost":
             params = {
                 "depth": trial.suggest_int("depth", 3, 9),
                 "learning_rate": trial.suggest_float("learning_rate", 0.015, 0.15, log=True),
-                "iterations": trial.suggest_int("iterations", 100, 500 if mode.lower() == "full" else 200),
+                "iterations": trial.suggest_int("iterations", 100, iterations_high),
+                "l2_leaf_reg": trial.suggest_float("l2_leaf_reg", 1e-3, 20.0, log=True),
             }
         elif model_name == "LightGBM":
             params = {
                 "num_leaves": trial.suggest_int("num_leaves", 15, 63),
+                "max_depth": trial.suggest_int("max_depth", 3, 10),
                 "learning_rate": trial.suggest_float("learning_rate", 0.015, 0.15, log=True),
-                "n_estimators": trial.suggest_int("n_estimators", 100, 700 if mode.lower() == "full" else 250),
+                "n_estimators": trial.suggest_int("n_estimators", 100, iterations_high),
+                "min_child_samples": trial.suggest_int("min_child_samples", 15, 100),
+                "subsample": trial.suggest_float("subsample", 0.7, 1.0),
+                "subsample_freq": trial.suggest_int("subsample_freq", 1, 5),
+                "colsample_bytree": trial.suggest_float("colsample_bytree", 0.7, 1.0),
+                "reg_alpha": trial.suggest_float("reg_alpha", 1e-8, 10.0, log=True),
+                "reg_lambda": trial.suggest_float("reg_lambda", 1e-8, 10.0, log=True),
             }
         else:
             params = {
                 "max_depth": trial.suggest_int("max_depth", 3, 9),
                 "learning_rate": trial.suggest_float("learning_rate", 0.015, 0.15, log=True),
-                "n_estimators": trial.suggest_int("n_estimators", 100, 700 if mode.lower() == "full" else 250),
+                "n_estimators": trial.suggest_int("n_estimators", 100, iterations_high),
+                "subsample": trial.suggest_float("subsample", 0.7, 1.0),
+                "colsample_bytree": trial.suggest_float("colsample_bytree", 0.7, 1.0),
+                "min_child_weight": trial.suggest_float("min_child_weight", 1e-2, 20.0, log=True),
+                "reg_alpha": trial.suggest_float("reg_alpha", 1e-8, 10.0, log=True),
+                "reg_lambda": trial.suggest_float("reg_lambda", 1e-8, 10.0, log=True),
             }
+
         scores = []
-        target = np.asarray(y, dtype=int)
-        for train_idx, valid_idx in cv.split(X, target):
+        for fold, (train_idx, valid_idx) in enumerate(cv.split(X, target), start=1):
             candidate = clone_pipeline(base)
             estimator = candidate.named_steps["model"].set_params(**params)
-            train_x, valid_x = X.iloc[train_idx], X.iloc[valid_idx]
-            train_y, valid_y = target[train_idx], target[valid_idx]
-            feature_step = candidate.named_steps["features"]
+            train_idx, early_idx = train_test_split(
+                train_idx,
+                test_size=0.15,
+                random_state=seed + 1000 * trial.number + fold,
+                stratify=target[train_idx],
+            )
+            fit_x, early_x, valid_x = X.iloc[train_idx], X.iloc[early_idx], X.iloc[valid_idx]
+            fit_y, early_y, valid_y = target[train_idx], target[early_idx], target[valid_idx]
+            feature_step = candidate.named_steps.get("features")
+            if feature_step is not None:
+                fit_frame = feature_step.fit_transform(fit_x, fit_y)
+                early_frame = feature_step.transform(early_x)
+                valid_frame = feature_step.transform(valid_x)
+            else:
+                fit_frame, early_frame, valid_frame = fit_x, early_x, valid_x
+
+            preprocessor = candidate.named_steps.get("preprocess")
+            if preprocessor is not None:
+                fit_features = preprocessor.fit_transform(fit_frame, fit_y)
+                early_features = preprocessor.transform(early_frame)
+                valid_features = preprocessor.transform(valid_frame)
+            else:
+                fit_features, early_features, valid_features = fit_frame, early_frame, valid_frame
+
             if model_name == "CatBoost":
-                train_features = feature_step.fit_transform(train_x)
-                valid_features = feature_step.transform(valid_x)
                 estimator.fit(
-                    train_features,
-                    train_y,
-                    eval_set=(valid_features, valid_y),
+                    fit_features,
+                    fit_y,
+                    eval_set=(early_features, early_y),
                     early_stopping_rounds=30,
                     verbose=False,
                 )
-            else:
-                preprocessor = candidate.named_steps["preprocess"]
-                train_engineered = feature_step.fit_transform(train_x)
-                valid_engineered = feature_step.transform(valid_x)
-                train_features = preprocessor.fit_transform(train_engineered, train_y)
-                valid_features = preprocessor.transform(valid_engineered)
-                if model_name == "LightGBM":
-                    from lightgbm import early_stopping, log_evaluation
+            elif model_name == "LightGBM":
+                from lightgbm import early_stopping, log_evaluation
 
-                    estimator.fit(
-                        train_features,
-                        train_y,
-                        eval_set=[(valid_features, valid_y)],
-                        callbacks=[early_stopping(30, verbose=False), log_evaluation(period=0)],
-                    )
-                else:
-                    estimator.set_params(early_stopping_rounds=30)
-                    estimator.fit(train_features, train_y, eval_set=[(valid_features, valid_y)], verbose=False)
+                estimator.fit(
+                    fit_features,
+                    fit_y,
+                    eval_set=[(early_features, early_y)],
+                    callbacks=[early_stopping(30, verbose=False), log_evaluation(period=0)],
+                )
+            else:
+                estimator.set_params(early_stopping_rounds=30)
+                estimator.fit(fit_features, fit_y, eval_set=[(early_features, early_y)], verbose=False)
+
             scores.append(roc_auc_score(valid_y, estimator.predict_proba(valid_features)[:, 1]))
+            trial.report(float(np.mean(scores)), step=fold)
+            if trial.should_prune():
+                raise optuna.TrialPruned()
         return float(np.mean(scores))
 
-    study = optuna.create_study(direction="maximize", sampler=optuna.samplers.TPESampler(seed=seed))
+    study = optuna.create_study(
+        study_name=study_name,
+        storage=storage_url.render_as_string(hide_password=False),
+        load_if_exists=True,
+        direction="maximize",
+        sampler=optuna.samplers.TPESampler(seed=seed),
+        pruner=optuna.pruners.MedianPruner(n_startup_trials=5, n_warmup_steps=1),
+    )
     started = time.perf_counter()
-    study.optimize(objective, n_trials=trials, show_progress_bar=False)
+    study.optimize(
+        objective,
+        n_trials=trial_budget,
+        timeout=timeout,
+        show_progress_bar=False,
+        gc_after_trial=True,
+        catch=caught_errors,
+    )
+    history = [
+        {
+            "number": trial.number,
+            "value": trial.value,
+            "params": trial.params,
+            "state": trial.state.name,
+            "duration_seconds": trial.duration.total_seconds() if trial.duration else None,
+        }
+        for trial in study.trials
+    ]
     return {
         "model": model_name,
+        "mode": mode,
+        "folds": 3 if mode == "quick" else 5,
+        "seed": seed,
         "best_score_roc_auc": study.best_value,
         "best_parameters": study.best_params,
         "pipeline_parameters": {f"model__{key}": value for key, value in study.best_params.items()},
         "duration_seconds": time.perf_counter() - started,
-        "trials": [{"number": t.number, "value": t.value, "params": t.params, "state": str(t.state)} for t in study.trials],
+        "study_name": study.study_name,
+        "study_path": str(sqlite_path),
+        "trial_count_total": len(study.trials),
+        "completed_trials": sum(trial.state == optuna.trial.TrialState.COMPLETE for trial in study.trials),
+        "pruned_trials": sum(trial.state == optuna.trial.TrialState.PRUNED for trial in study.trials),
+        "failed_trials": sum(trial.state == optuna.trial.TrialState.FAIL for trial in study.trials),
+        "trials": history,
     }
 
 

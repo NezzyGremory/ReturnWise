@@ -152,10 +152,13 @@ def quality_report(df: pd.DataFrame, target: str | None = TARGET) -> dict[str, A
 
 
 def eda_summaries(df: pd.DataFrame, target: str = TARGET) -> dict[str, Any]:
+    # pandas 3 introduces a distinct ``str`` dtype; selecting ``object`` also
+    # includes it for compatibility but emits a deprecation warning.
+    string_selector = "str" if int(pd.__version__.split(".", 1)[0]) >= 3 else "object"
     result: dict[str, Any] = {
         "shape": df.shape,
         "numeric_summary": df.describe(include=["number"]).T.reset_index(names="feature"),
-        "categorical_summary": df.describe(include=["object", "category", "bool"]).T.reset_index(names="feature"),
+        "categorical_summary": df.describe(include=[string_selector, "category", "bool"]).T.reset_index(names="feature"),
     }
     if target in df.columns:
         counts = df[target].value_counts(dropna=False).rename_axis("returned").reset_index(name="rows")
