@@ -2,9 +2,15 @@ import streamlit as st
 
 st.set_page_config(
     page_title="ReturnWise",
-    page_icon=":material/monitoring:",
+    page_icon="site/assets/returnwise-mark.svg",
     layout="wide",
     initial_sidebar_state="expanded",
+)
+
+st.logo(
+    "site/assets/returnwise-wordmark.svg",
+    icon_image="site/assets/returnwise-mark.svg",
+    size="large",
 )
 
 page = st.navigation(

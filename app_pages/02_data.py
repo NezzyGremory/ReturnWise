@@ -5,7 +5,8 @@ from returnwise.data.kaggle import EXPECTED_FILES, cli_version, list_competition
 from returnwise.data.profile import data_dictionary, quality_report
 from returnwise.storage import load_active_dataset, save_manual_csv, use_kaggle_training_data
 
-st.title("Dataset and quality")
+st.caption("WORKSPACE / DATA QUALITY")
+st.title("Select and inspect a dataset")
 st.write("Use the Kaggle competition connector or import a CSV. ReturnWise keeps the selected dataset locally and reports the source and validation status.")
 
 mode = st.segmented_control("Dataset mode", ["Kaggle connected", "Manual CSV"], default="Kaggle connected", key="dataset_mode")

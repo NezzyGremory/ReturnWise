@@ -38,12 +38,18 @@ def app_status():
     with st.container(border=True):
         st.caption("Workspace status")
         data_label = "No active dataset" if manifest is None else f"{manifest.get('source', 'unknown').title()} dataset"
-        model_label = artifact.get("metadata", {}).get("selected_model", "No model artifact") if artifact else "No model artifact"
+        model_name = artifact.get("metadata", {}).get("selected_model", "") if artifact else ""
+        model_label = f"Historical experimental artifact · {model_name}" if model_name else "No model artifact"
         st.write(f"**Data:** {data_label}  ·  **Model:** {model_label}")
         if frame is not None:
             st.caption(f"{len(frame):,} rows · {len(frame.columns):,} columns")
         elif manifest and manifest.get("load_error"):
             st.error(manifest["load_error"])
+        if artifact:
+            st.warning(
+                "This retained artifact predates the corrected raw-feature pipeline. It is available for research scoring, not validated production use.",
+                title="Experimental model status",
+            )
 
 
 def require_dataset():

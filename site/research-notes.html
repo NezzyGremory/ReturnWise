@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f6f8f4">
+    <meta name="description" content="Research protocol, dataset provenance, model results, and deployment limits for ReturnWise.">
+    <title>Research notes | ReturnWise</title>
+    <link rel="icon" href="/assets/returnwise-mark.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <header class="site-header">
+      <a class="brand" href="/" aria-label="ReturnWise home"><img src="/assets/returnwise-mark.svg" width="40" height="40" alt=""><span>Return<span class="brand-light">Wise</span></span></a>
+      <nav class="primary-nav" aria-label="Main navigation"><a href="/#workflow">How it works</a><a href="/#workspace">Review desk</a><a href="/#evidence" class="nav-cta">Research summary</a></nav>
+    </header>
+    <main id="main" class="notes-page section-wrap section-pad">
+      <p class="eyebrow">RESEARCH RECORD / UPDATED 15 NOVEMBER 2026</p>
+      <h1>What the results<br><em>can tell us.</em></h1>
+      <p class="notes-intro">ReturnWise is a local research workspace for return-risk estimation and review prioritization. The current evidence supports exploratory comparison only. It does not establish time-safe performance or operational impact.</p>
+      <div class="notes-callout"><b>Current status</b><span>No corrected candidate has a fresh holdout evaluation, deployment refit, or integrated replacement artifact. The saved model remains a historical experimental artifact.</span></div>
+
+      <section class="notes-section">
+        <p class="eyebrow">01 / DATASET</p><h2>Competition data with an unknown time boundary.</h2>
+        <p>The validated local files include 200,000 labeled training rows and 50,000 unlabeled competition test rows. The target is <code>returned</code>. The competition metric is ROC-AUC.</p>
+        <p>The supplied specification does not establish an event-order timestamp or a feature snapshot cutoff. A random split therefore does not test temporal generalization. The unlabeled competition test file is not used for labeled evaluation.</p>
+      </section>
+
+      <section class="notes-section">
+        <p class="eyebrow">02 / RESULTS</p><h2>Keep each number with its evaluation protocol.</h2>
+        <div class="notes-table-wrap"><table class="data-table notes-table"><caption>Reported model results and their limits</caption><thead><tr><th scope="col">Result</th><th scope="col">Evaluation</th><th scope="col">Reading</th></tr></thead><tbody>
+          <tr><td><b>ROC-AUC 0.587648</b></td><td>Corrected raw-feature blend, three-fold out-of-fold</td><td>Exploratory OOF estimate. Not a holdout score.</td></tr>
+          <tr><td><b>ROC-AUC 0.589481</b><br>AP 0.556060<br>Brier 0.243089<br>Log loss 0.679141</td><td>Earlier soft-vote model with beta calibration, random 40,000-row internal holdout</td><td>Historical result from the pipeline before the corrected raw-feature work.</td></tr>
+        </tbody></table></div>
+        <p>The corrected OOF score is not directly interchangeable with the earlier holdout result. Their protocols and pipeline versions differ.</p>
+      </section>
+
+      <section class="notes-section">
+        <p class="eyebrow">03 / FEATURE POLICY</p><h2>Pre-shipment is the working scenario.</h2>
+        <p>Identifiers, target-derived or potentially post-event fields, delivery delay, and customer history without a verifiable time cutoff are excluded from the corrected raw-feature pipeline. This is a research policy based on available documentation, not proof that every retained feature was available at the exact prediction moment.</p>
+      </section>
+
+      <section class="notes-section">
+        <p class="eyebrow">04 / DECISION USE</p><h2>Capacity shapes a review list.</h2>
+        <p>The review queue ranks records by a probability already present in the uploaded file. It does not produce fresh estimates. Review capacity limits the number shown in the priority set. Expected counts in the local Python simulator are derived from probabilities and stated assumptions.</p>
+        <p>A model association does not show that a review causes a return to be prevented or changes profit. A probability is uncertain and should be interpreted alongside human review and operational context.</p>
+      </section>
+
+      <section class="notes-section">
+        <p class="eyebrow">05 / DEPLOYMENT</p><h2>The Netlify surface is static.</h2>
+        <p>This page can inspect local CSV files and rank supplied probability columns entirely in the browser. The Python package, Streamlit app, and local joblib artifact are not hosted on this static site. No live inference endpoint is configured.</p>
+        <p>To continue the research locally, run the Streamlit application from the project workspace. The operational scoring path remains experimental and must not be treated as production validated.</p>
+      </section>
+      <a class="button button-primary notes-back" href="/">Return to the review desk <span aria-hidden="true">↗</span></a>
+    </main>
+    <footer class="site-footer"><div class="section-wrap footer-bottom"><span>ReturnWise research workspace</span><span>PROTOCOLS DISCLOSED · CLAIMS LIMITED</span></div></footer>
+  </body>
+</html>

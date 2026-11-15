@@ -6,7 +6,8 @@ from returnwise.data.profile import eda_summaries
 from returnwise.features import temporal_feature_audit
 from returnwise.ui import require_dataset
 
-st.title("EDA and statistics")
+st.caption("WORKSPACE / EXPLORATORY ANALYSIS")
+st.title("Explore dataset patterns")
 frame, manifest = require_dataset()
 if frame is not None:
     summary = eda_summaries(frame)
@@ -37,7 +38,7 @@ if frame is not None:
         with st.spinner("Running non-parametric and contingency-table association tests…"):
             results = association_tests(frame)
         st.subheader("Association tests")
-        st.caption("Numeric features: two-sided Mann–Whitney U, rank-biserial effect size, and bootstrap median-difference intervals. Categorical features: chi-square and Cramér’s V. Benjamini–Hochberg correction controls the false-discovery rate across tested features.")
+        st.caption("Numeric features: two-sided Mann-Whitney U, rank-biserial effect size, and bootstrap median-difference intervals. Categorical features: chi-square and Cramér’s V. Benjamini-Hochberg correction controls the false-discovery rate across tested features.")
         if results.empty:
             st.info("No eligible feature-target comparisons were found.")
         else:

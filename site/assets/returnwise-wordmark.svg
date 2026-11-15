@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 242 48" role="img" aria-labelledby="title">
+  <title id="title">ReturnWise</title>
+  <rect width="48" height="48" rx="10" fill="#164E35"/>
+  <path d="m13 17 11-6 11 6-11 6-11-6Z M13 17v13l11 6 11-6V17 M24 23v13 M13 24l11 6 11-6" fill="none" stroke="#F6F8F4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+  <path d="M34 29a10 10 0 0 1-15 4m-2-2 2 4 4-2" fill="none" stroke="#A9C978" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.4"/>
+  <text x="62" y="33" fill="#164E35" font-family="Arial, sans-serif" font-size="28" font-weight="700" letter-spacing="-1">ReturnWise</text>
+</svg>
