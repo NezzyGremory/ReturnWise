@@ -21,3 +21,6 @@ experiments/research_state.joblib
 *.joblib
 *.pkl
 .pytest_cache/
+
+# Local Netlify folder
+.netlify
