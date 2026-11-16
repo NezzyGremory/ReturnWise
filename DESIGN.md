@@ -71,3 +71,17 @@ Design for a fluid range rather than fixed device widths. The Streamlit drawer h
 3. Use diagrams and interface previews only to explain the return-review workflow.
 4. Prefer whitespace, rules, and alignment over shadows, glow, gradients, decorative grids, and excess badges.
 5. Preserve uncertainty: a probability is not a certain outcome, and prioritizing review is not evidence that the return will be prevented.
+
+## Smart Retail workspace direction
+
+Smart Retail extends the forest-and-paper palette into a shop operations workspace. The page voice is direct Indonesian; financial values identify whether they are revenue, cost, or estimated gross profit. Smart Retail has a separate local SQLite database and does not reuse ReturnWise research data or its model.
+
+- ENERGY: 2. Keep the workspace calm and workmanlike, with a clear sales register as the most distinctive page.
+- RHYTHM: 2. Use a concise operational overview, dense but readable record tables, a task-focused POS, and analysis pages that pair results with calculation notes.
+- MOTION: 1. Use Streamlit's native focus and interaction states; no decorative animation.
+- Keep the existing forest green, warm off-white, soft gray rules, and restrained amber/red status colors. The local theme supplies the palette and serif page headings, while system sans remains familiar in controls and tables.
+- Prefer Streamlit's native navigation, forms, tables, metrics, and charts. Native components preserve keyboard operation and keep the interface maintainable without a custom CSS layer.
+- Keep overview metrics to the decisions a shop owner needs first. Inventory and transaction records stay tabular because users need to scan and compare exact values.
+- The POS gives product search and cart editing a direct path, with amount due, paid amount, and change shown together before checkout.
+- Every operational count and chart comes from stored retail records. Empty stores show an onboarding state; forecasts and recommendations state their data requirements and calculation basis.
+- On narrow screens, favor stacked controls and contained table scrolling over shrinking labels or clipping the page.

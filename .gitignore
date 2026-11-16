@@ -11,6 +11,8 @@ data/kaggle/*
 !data/kaggle/.gitkeep
 data/manual/*
 !data/manual/.gitkeep
+data/smart_retail.sqlite3
+data/smart_retail.sqlite3-*
 artifacts/*
 !artifacts/.gitkeep
 reports/generated/*
