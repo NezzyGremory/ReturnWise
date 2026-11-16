@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: smart-retail-demo
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements-smart-retail.txt
+    startCommand: streamlit run smart_retail_app.py --server.address 0.0.0.0 --server.port $PORT
+    healthCheckPath: /_stcore/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.10
+      - key: SMART_RETAIL_DB
+        value: /tmp/smart_retail_demo.sqlite3
+      - key: SMART_RETAIL_TIMEZONE
+        value: Asia/Jakarta
